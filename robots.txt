@@ -1,3 +1,2 @@
 User-agent: *
 Disallow: /
-Allow: /個人作品.html
