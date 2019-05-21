@@ -1,4 +1,0 @@
-# HTTrack Website Copier Cookie File
-# This file format is compatible with Netscape cookies
-mhp3wiki.duowan.com	TRUE	/	FALSE	1999999999	mhp3db_session	dq1pb2poukcb2id60akquabon4
-
