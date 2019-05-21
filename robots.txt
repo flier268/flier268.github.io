@@ -1,2 +1,2 @@
 User-agent: *
-Disallow: /
+Disallow: /MHP3資料庫繁體站/
