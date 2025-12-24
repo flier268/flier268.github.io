@@ -336,6 +336,26 @@ function getLegalMoves(side) {
   return moves;
 }
 
+function getTacticalMoves(side) {
+  const moves = [];
+  for (let r = 0; r < BOARD_ROWS; r++) {
+    for (let c = 0; c < BOARD_COLS; c++) {
+      const piece = board[r][c];
+      if (!piece || !isSidePiece(piece, side)) continue;
+      const pseudo = getPseudoMoves(piece, r, c);
+      pseudo.forEach((move) => {
+        const target = board[move.to[0]][move.to[1]];
+        if (target) {
+          if (isLegalMove(move, side)) moves.push(move);
+          return;
+        }
+        if (givesCheckQuick(move, side) && isLegalMove(move, side)) moves.push(move);
+      });
+    }
+  }
+  return moves;
+}
+
 function isLegalMove(move, side) {
   const snapshot = board[move.to[0]][move.to[1]];
   const piece = board[move.from[0]][move.from[1]];
@@ -354,8 +374,126 @@ function isInCheck(side) {
 }
 
 function isSquareAttacked(r, c, attackerSide) {
-  const enemyMoves = getPseudoMovesForSide(attackerSide, true);
-  return enemyMoves.some((m) => m.to[0] === r && m.to[1] === c);
+  const isRed = attackerSide === "r";
+  const enemyPawn = isRed ? "P" : "p";
+  const enemyKing = isRed ? "K" : "k";
+  const enemyAdvisor = isRed ? "A" : "a";
+  const enemyElephant = isRed ? "E" : "e";
+  const enemyHorse = isRed ? "H" : "h";
+  const enemyRook = isRed ? "R" : "r";
+  const enemyCannon = isRed ? "C" : "c";
+  let rr;
+
+  const pawnDir = isRed ? 1 : -1;
+  const pawnR = r + pawnDir;
+  if (insideBoard(pawnR, c) && board[pawnR][c] === enemyPawn) return true;
+  if (isRed ? r <= 4 : r >= 5) {
+    if (insideBoard(r, c - 1) && board[r][c - 1] === enemyPawn) return true;
+    if (insideBoard(r, c + 1) && board[r][c + 1] === enemyPawn) return true;
+  }
+
+  const palaceRows = isRed ? [7, 9] : [0, 2];
+  const palaceCols = [3, 5];
+  const kingSteps = [
+    [1, 0], [-1, 0], [0, 1], [0, -1]
+  ];
+  for (const [dr, dc] of kingSteps) {
+    const rr = r + dr;
+    const cc = c + dc;
+    if (rr >= palaceRows[0] && rr <= palaceRows[1] && cc >= palaceCols[0] && cc <= palaceCols[1]) {
+      if (board[rr][cc] === enemyKing) return true;
+    }
+  }
+
+  rr = r + (isRed ? 1 : -1);
+  while (insideBoard(rr, c)) {
+    const piece = board[rr][c];
+    if (piece) {
+      if (piece === enemyKing) return true;
+      break;
+    }
+    rr += isRed ? 1 : -1;
+  }
+
+  const advisorSteps = [
+    [1, 1], [1, -1], [-1, 1], [-1, -1]
+  ];
+  for (const [dr, dc] of advisorSteps) {
+    const ar = r + dr;
+    const ac = c + dc;
+    if (ar >= palaceRows[0] && ar <= palaceRows[1] && ac >= palaceCols[0] && ac <= palaceCols[1]) {
+      if (board[ar][ac] === enemyAdvisor) return true;
+    }
+  }
+
+  const elephantSteps = [
+    [2, 2], [2, -2], [-2, 2], [-2, -2]
+  ];
+  const riverLimit = isRed ? 4 : 5;
+  for (const [dr, dc] of elephantSteps) {
+    const er = r + dr;
+    const ec = c + dc;
+    const eyeR = r + dr / 2;
+    const eyeC = c + dc / 2;
+    if (!insideBoard(er, ec) || board[eyeR][eyeC]) continue;
+    if (isRed && er < riverLimit) continue;
+    if (!isRed && er > riverLimit) continue;
+    if (board[er][ec] === enemyElephant) return true;
+  }
+
+  const horseSteps = [
+    [2, 1, 1, 0], [2, -1, 1, 0], [-2, 1, -1, 0], [-2, -1, -1, 0],
+    [1, 2, 0, 1], [1, -2, 0, -1], [-1, 2, 0, 1], [-1, -2, 0, -1]
+  ];
+  for (const [dr, dc, br, bc] of horseSteps) {
+    const hr = r + dr;
+    const hc = c + dc;
+    const brc = r + br;
+    const bcc = c + bc;
+    if (!insideBoard(hr, hc) || board[brc][bcc]) continue;
+    if (board[hr][hc] === enemyHorse) return true;
+  }
+
+  const rookDirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (const [dr, dc] of rookDirs) {
+    rr = r + dr;
+    let cc = c + dc;
+    while (insideBoard(rr, cc)) {
+      const piece = board[rr][cc];
+      if (piece) {
+        if (piece === enemyRook) return true;
+        break;
+      }
+      rr += dr;
+      cc += dc;
+    }
+  }
+
+  for (const [dr, dc] of rookDirs) {
+    rr = r + dr;
+    let cc = c + dc;
+    while (insideBoard(rr, cc)) {
+      const piece = board[rr][cc];
+      if (piece) {
+        rr += dr;
+        cc += dc;
+        while (insideBoard(rr, cc)) {
+          const next = board[rr][cc];
+          if (next) {
+            if (next === enemyCannon) return true;
+            break;
+          }
+          rr += dr;
+          cc += dc;
+        }
+        break;
+      }
+      rr += dr;
+      cc += dc;
+    }
+  }
+
+  return false;
 }
 
 function getPseudoMovesForSide(side, attackOnly = false) {
@@ -536,6 +674,248 @@ function countAttackers(targetR, targetC, attackerSide) {
   return count;
 }
 
+function singleBetweenOnFile(r1, c, r2) {
+  if (c < 0 || c >= BOARD_COLS) return null;
+  const start = Math.min(r1, r2) + 1;
+  const end = Math.max(r1, r2);
+  let seen = null;
+  for (let r = start; r < end; r++) {
+    if (board[r][c]) {
+      if (seen) return null;
+      seen = [r, c];
+    }
+  }
+  return seen;
+}
+
+function singleBetweenOnRank(c1, r, c2) {
+  if (r < 0 || r >= BOARD_ROWS) return null;
+  const start = Math.min(c1, c2) + 1;
+  const end = Math.max(c1, c2);
+  let seen = null;
+  for (let c = start; c < end; c++) {
+    if (board[r][c]) {
+      if (seen) return null;
+      seen = [r, c];
+    }
+  }
+  return seen;
+}
+
+function cannonOpenLines(cr, cc) {
+  let bonus = 0;
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (const [dr, dc] of dirs) {
+    let rr = cr + dr;
+    let cc2 = cc + dc;
+    let empty = 0;
+    while (insideBoard(rr, cc2) && !board[rr][cc2]) {
+      empty += 1;
+      rr += dr;
+      cc2 += dc;
+    }
+    bonus += Math.min(empty, 3) * 2;
+  }
+  return bonus;
+}
+
+function cannonActivityBonus(cannons) {
+  let bonus = 0;
+  cannons.forEach(([cr, cc]) => {
+    bonus += cannonOpenLines(cr, cc) * 4;
+    const centerDist = Math.abs(cc - 4) + Math.abs(cr - 4.5);
+    bonus += Math.max(0, 8 - centerDist) * 2;
+  });
+  return bonus;
+}
+
+function cannonScreenThreatScoreFrom(cr, cc, side) {
+  let score = 0;
+  const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+  for (const [dr, dc] of dirs) {
+    let rr = cr + dr;
+    let cc2 = cc + dc;
+    while (insideBoard(rr, cc2) && !board[rr][cc2]) {
+      rr += dr;
+      cc2 += dc;
+    }
+    if (!insideBoard(rr, cc2)) continue;
+    rr += dr;
+    cc2 += dc;
+    while (insideBoard(rr, cc2) && !board[rr][cc2]) {
+      rr += dr;
+      cc2 += dc;
+    }
+    if (!insideBoard(rr, cc2)) continue;
+    const target = board[rr][cc2];
+    if (target && !isSidePiece(target, side)) {
+      const base = Math.min(PIECES[target].value, 600);
+      score += Math.round(base * 0.2);
+      if (target.toUpperCase() === "K") score += 80;
+    }
+  }
+  return score;
+}
+
+function cannonScreenThreatBonus(side, cannons) {
+  let bonus = 0;
+  cannons.forEach(([cr, cc]) => {
+    bonus += cannonScreenThreatScoreFrom(cr, cc, side);
+  });
+  return bonus;
+}
+
+function threatScoreForSide(side) {
+  const attacks = getPseudoMovesForSide(side, true);
+  const bestTargets = new Map();
+  attacks.forEach((move) => {
+    const target = board[move.to[0]][move.to[1]];
+    if (!target) return;
+    const key = `${move.to[0]}-${move.to[1]}`;
+    const val = PIECES[target].value;
+    const prev = bestTargets.get(key) || 0;
+    if (val > prev) bestTargets.set(key, val);
+  });
+  let score = 0;
+  bestTargets.forEach((val) => {
+    score += Math.min(val, 600) / 10;
+  });
+  return score;
+}
+
+function cannonRookSynergy(side, cannons, rooks, enemyKingPos) {
+  let bonus = 0;
+  if (!enemyKingPos) return bonus;
+  const rookId = side === "r" ? "R" : "r";
+  cannons.forEach(([cr, cc]) => {
+    rooks.forEach(([rr, rc]) => {
+      if (cr === rr || cc === rc) {
+        const between = countBetween(cr, cc, rr, rc);
+        if (between === 0) bonus += 8;
+        if (between === 1) bonus += 16;
+      }
+    });
+    if (cr === enemyKingPos[0]) {
+      const between = countBetween(cr, cc, enemyKingPos[0], enemyKingPos[1]);
+      if (between === 1) {
+        const screen = singleBetweenOnRank(cc, cr, enemyKingPos[1]);
+        if (screen && board[screen[0]][screen[1]] === rookId) bonus += 28;
+      }
+    }
+    if (cc === enemyKingPos[1]) {
+      const between = countBetween(cr, cc, enemyKingPos[0], enemyKingPos[1]);
+      if (between === 1) {
+        const screen = singleBetweenOnFile(cr, cc, enemyKingPos[0]);
+        if (screen && board[screen[0]][screen[1]] === rookId) bonus += 32;
+      }
+    }
+  });
+  return bonus;
+}
+
+function cannonKingProximity(side, cannons, enemyKingPos) {
+  if (!enemyKingPos) return 0;
+  let bonus = 0;
+  const isRed = side === "r";
+  const enemyPalaceRows = isRed ? [0, 2] : [7, 9];
+  cannons.forEach(([cr, cc]) => {
+    const dist = Math.abs(cr - enemyKingPos[0]) + Math.abs(cc - enemyKingPos[1]);
+    if (dist <= 3) bonus += 10;
+    if (cc === enemyKingPos[1] && Math.abs(cr - enemyKingPos[0]) <= 4) bonus += 12;
+    if (cr === enemyKingPos[0] && Math.abs(cc - enemyKingPos[1]) <= 4) bonus += 8;
+    if (cr >= enemyPalaceRows[0] - 1 && cr <= enemyPalaceRows[1] + 1) bonus += 8;
+  });
+  return bonus;
+}
+
+function cannonStrategicBonus(side, ownKingPos, enemyKingPos, cannons) {
+  if (!ownKingPos || !enemyKingPos) return 0;
+  const isRed = side === "r";
+  const cannonId = isRed ? "C" : "c";
+  let bonus = 0;
+
+  cannons.forEach(([cr, cc]) => {
+    if (board[cr][cc] !== cannonId) return;
+    bonus += cannonOpenLines(cr, cc);
+    if (cc === enemyKingPos[1]) {
+      const between = countBetween(cr, cc, enemyKingPos[0], enemyKingPos[1]);
+      if (between === 1) {
+        bonus += 45;
+        const screen = singleBetweenOnFile(cr, cc, enemyKingPos[0]);
+        if (screen) {
+          const screenPiece = board[screen[0]][screen[1]];
+          bonus += screenPiece && isSidePiece(screenPiece, side) ? 8 : 15;
+          if (Math.abs(screen[0] - enemyKingPos[0]) === 1) bonus += 20;
+        }
+      }
+    }
+    if (cr === enemyKingPos[0]) {
+      const between = countBetween(cr, cc, enemyKingPos[0], enemyKingPos[1]);
+      if (between === 1) {
+        bonus += 35;
+        const screen = singleBetweenOnRank(cc, cr, enemyKingPos[1]);
+        if (screen) {
+          const screenPiece = board[screen[0]][screen[1]];
+          bonus += screenPiece && isSidePiece(screenPiece, side) ? 6 : 12;
+          if (Math.abs(screen[1] - enemyKingPos[1]) === 1) bonus += 16;
+        }
+      }
+    }
+  });
+
+  if (ownKingPos[1] === enemyKingPos[1]) {
+    const betweenPos = singleBetweenOnFile(ownKingPos[0], ownKingPos[1], enemyKingPos[0]);
+    if (betweenPos && board[betweenPos[0]][betweenPos[1]] === cannonId) {
+      bonus += 60;
+    }
+  }
+
+  return bonus;
+}
+
+function pawnStructureBonus(pawns) {
+  const fileCounts = Array(BOARD_COLS).fill(0);
+  const pawnSet = new Set();
+  pawns.forEach(([r, c]) => {
+    fileCounts[c] += 1;
+    pawnSet.add(`${r}-${c}`);
+  });
+  let bonus = 0;
+  pawns.forEach(([r, c]) => {
+    if (pawnSet.has(`${r}-${c - 1}`) || pawnSet.has(`${r}-${c + 1}`)) bonus += 8;
+  });
+  fileCounts.forEach((count) => {
+    if (count > 1) bonus -= (count - 1) * 10;
+  });
+  return bonus;
+}
+
+function openFileBonus(side, rooks, cannons, redPawnCount, blackPawnCount, enemyKingPos) {
+  let bonus = 0;
+  const ownPawnCount = side === "r" ? redPawnCount : blackPawnCount;
+  const enemyPawnCount = side === "r" ? blackPawnCount : redPawnCount;
+  rooks.forEach(([, c]) => {
+    if (ownPawnCount[c] === 0 && enemyPawnCount[c] === 0) bonus += 18;
+    else if (ownPawnCount[c] === 0) bonus += 10;
+    if (enemyKingPos && c === enemyKingPos[1]) bonus += 6;
+  });
+  cannons.forEach(([, c]) => {
+    if (ownPawnCount[c] === 0 && enemyPawnCount[c] === 0) bonus += 10;
+    else if (ownPawnCount[c] === 0) bonus += 6;
+  });
+  return bonus;
+}
+
+function kingActivityBonus(side, kingPos, totalMaterial) {
+  if (!kingPos) return 0;
+  const threshold = 2000;
+  if (totalMaterial >= threshold) return 0;
+  const phase = (threshold - totalMaterial) / threshold;
+  const center = side === "r" ? [8, 4] : [1, 4];
+  const dist = Math.abs(kingPos[0] - center[0]) + Math.abs(kingPos[1] - center[1]);
+  return Math.max(0, 6 - dist) * 8 * phase;
+}
+
 function isPassedPawn(side, r, c) {
   if (side === "r") {
     for (let rr = r - 1; rr >= 0; rr--) {
@@ -617,6 +997,7 @@ function evaluateBoard() {
   let score = 0;
   let redKingPos = null;
   let blackKingPos = null;
+  let totalMaterial = 0;
   const positions = {
     r: { A: [], E: [], H: [], R: [], C: [], P: [] },
     b: { A: [], E: [], H: [], R: [], C: [], P: [] },
@@ -630,6 +1011,7 @@ function evaluateBoard() {
       const val = PIECES[piece].value;
       score += isRed ? val : -val;
       score += isRed ? positionalBonus(piece, r, c) : -positionalBonus(piece, r, c);
+      if (piece.toUpperCase() !== "K") totalMaterial += val;
       const bucket = isRed ? positions.r : positions.b;
       const key = piece.toUpperCase();
       if (bucket[key]) bucket[key].push([r, c]);
@@ -654,15 +1036,35 @@ function evaluateBoard() {
 
   score += coordinationBonus(positions.r);
   score -= coordinationBonus(positions.b);
+  score += pawnStructureBonus(positions.r.P);
+  score -= pawnStructureBonus(positions.b.P);
 
   score += kingSafety("r", redKingPos, positions.r, positions.b);
   score -= kingSafety("b", blackKingPos, positions.b, positions.r);
+  score += cannonStrategicBonus("r", redKingPos, blackKingPos, positions.r.C);
+  score -= cannonStrategicBonus("b", blackKingPos, redKingPos, positions.b.C);
+  score += cannonActivityBonus(positions.r.C);
+  score -= cannonActivityBonus(positions.b.C);
+  score += cannonScreenThreatBonus("r", positions.r.C);
+  score -= cannonScreenThreatBonus("b", positions.b.C);
+  score += cannonRookSynergy("r", positions.r.C, positions.r.R, blackKingPos);
+  score -= cannonRookSynergy("b", positions.b.C, positions.b.R, redKingPos);
+  score += cannonKingProximity("r", positions.r.C, blackKingPos);
+  score -= cannonKingProximity("b", positions.b.C, redKingPos);
+  const redPawnCount = Array(BOARD_COLS).fill(0);
+  const blackPawnCount = Array(BOARD_COLS).fill(0);
+  positions.r.P.forEach(([, c]) => (redPawnCount[c] += 1));
+  positions.b.P.forEach(([, c]) => (blackPawnCount[c] += 1));
+  score += openFileBonus("r", positions.r.R, positions.r.C, redPawnCount, blackPawnCount, blackKingPos);
+  score -= openFileBonus("b", positions.b.R, positions.b.C, redPawnCount, blackPawnCount, redKingPos);
+  score += kingActivityBonus("r", redKingPos, totalMaterial);
+  score -= kingActivityBonus("b", blackKingPos, totalMaterial);
 
   const redPressure = countAttackers(blackKingPos[0], blackKingPos[1], "r");
   const blackPressure = countAttackers(redKingPos[0], redKingPos[1], "b");
   score += (redPressure - blackPressure) * 14;
 
-  const mobility = getLegalMoves("r").length - getLegalMoves("b").length;
+  const mobility = getPseudoMovesForSide("r").length - getPseudoMovesForSide("b").length;
   score += mobility * 2;
   return score;
 }
@@ -694,6 +1096,37 @@ function timeBudgetForDepth(maxDepth) {
   return base + maxDepth * 420;
 }
 
+function countPieces() {
+  let count = 0;
+  for (let r = 0; r < BOARD_ROWS; r++) {
+    for (let c = 0; c < BOARD_COLS; c++) {
+      if (board[r][c]) count += 1;
+    }
+  }
+  return count;
+}
+
+function estimateDynamicDepth(baseDepth) {
+  const pieceCount = countPieces();
+  const moveCount = getLegalMoves(sideToMove).length;
+  let depth = baseDepth;
+
+  if (pieceCount <= 10) depth += 2;
+  else if (pieceCount <= 16) depth += 1;
+  else if (pieceCount >= 26) depth -= 1;
+
+  if (moveCount <= 10) depth += 1;
+  else if (moveCount >= 32) depth -= 1;
+
+  if (isInCheck(sideToMove)) depth += 1;
+
+  const lowerCap = Math.max(2, baseDepth - 1);
+  const upperCap = Math.min(7, baseDepth + 2);
+  depth = Math.max(lowerCap, Math.min(upperCap, depth));
+
+  return { depth, pieceCount, moveCount };
+}
+
 function searchBestMove(depth) {
   const side = sideToMove;
   const moves = getLegalMoves(side);
@@ -704,6 +1137,7 @@ function searchBestMove(depth) {
 
   let bestScore = side === "r" ? -Infinity : Infinity;
   let bestMoves = [];
+  const rootScores = [];
 
   const rootEntry = transpositionTable.get(currentHash);
   const ordered = orderMoves(moves, side, 0, rootEntry?.bestKey || null);
@@ -711,6 +1145,7 @@ function searchBestMove(depth) {
     const captured = makeSearchMove(move);
     const score = minimax(depth - 1, side === "r" ? "b" : "r", -Infinity, Infinity, 1);
     undoSearchMove(move, captured);
+    rootScores.push({ move, score });
 
     if ((side === "r" && score > bestScore) || (side === "b" && score < bestScore)) {
       bestScore = score;
@@ -722,7 +1157,8 @@ function searchBestMove(depth) {
 
   const bestKey = bestMoves[0] ? moveKey(bestMoves[0].move) : null;
   transpositionTable.set(currentHash, { depth, score: bestScore, flag: "exact", bestKey });
-  return { move: bestMoves[0].move, score: bestScore, candidates: bestMoves };
+  rootScores.sort((a, b) => (side === "r" ? b.score - a.score : a.score - b.score));
+  return { move: bestMoves[0].move, score: bestScore, candidates: rootScores.slice(0, 3) };
 }
 
 function minimax(depth, side, alpha, beta, ply) {
@@ -749,8 +1185,10 @@ function minimax(depth, side, alpha, beta, ply) {
     let bestKey = null;
     const ordered = orderMoves(moves, side, ply, ttEntry?.bestKey || null);
     for (const move of ordered) {
+      const piece = board[move.from[0]][move.from[1]];
+      const extend = depth > 1 && piece && piece.toUpperCase() === "C" && givesCheckQuick(move, side) ? 1 : 0;
       const captured = makeSearchMove(move);
-      const score = minimax(depth - 1, "b", alpha, beta, ply + 1);
+      const score = minimax(depth - 1 + extend, "b", alpha, beta, ply + 1);
       undoSearchMove(move, captured);
       if (score > value) {
         value = score;
@@ -781,8 +1219,10 @@ function minimax(depth, side, alpha, beta, ply) {
   let bestKey = null;
   const ordered = orderMoves(moves, side, ply, ttEntry?.bestKey || null);
   for (const move of ordered) {
+    const piece = board[move.from[0]][move.from[1]];
+    const extend = depth > 1 && piece && piece.toUpperCase() === "C" && givesCheckQuick(move, side) ? 1 : 0;
     const captured = makeSearchMove(move);
-    const score = minimax(depth - 1, "r", alpha, beta, ply + 1);
+    const score = minimax(depth - 1 + extend, "r", alpha, beta, ply + 1);
     undoSearchMove(move, captured);
     if (score < value) {
       value = score;
@@ -843,12 +1283,7 @@ function quiescence(side, alpha, beta, depth) {
     if (alpha >= beta) return alpha;
   }
 
-  const moves = getLegalMoves(side);
-  const tactical = moves.filter((m) => {
-    if (board[m.to[0]][m.to[1]]) return true;
-    return givesCheckQuick(m, side);
-  });
-
+  const tactical = getTacticalMoves(side);
   const ordered = orderMoves(tactical, side, 0, null);
   for (const move of ordered) {
     const captured = makeSearchMove(move);
@@ -870,10 +1305,13 @@ function moveKey(move) {
 }
 
 function orderMoves(moves, side, ply, ttMoveKey) {
-  return moves.slice().sort((a, b) => scoreMove(b, side, ply, ttMoveKey) - scoreMove(a, side, ply, ttMoveKey));
+  const enemyKingPos = findKing(side === "r" ? "b" : "r");
+  return moves
+    .slice()
+    .sort((a, b) => scoreMove(b, side, ply, ttMoveKey, enemyKingPos) - scoreMove(a, side, ply, ttMoveKey, enemyKingPos));
 }
 
-function scoreMove(move, side, ply, ttMoveKey) {
+function scoreMove(move, side, ply, ttMoveKey, enemyKingPos) {
   const attacker = board[move.from[0]][move.from[1]];
   const target = board[move.to[0]][move.to[1]];
   let score = 0;
@@ -893,6 +1331,15 @@ function scoreMove(move, side, ply, ttMoveKey) {
   if (side === "r" && move.to[0] <= 2) score += 15;
   if (side === "b" && move.to[0] >= 7) score += 15;
   if (ply <= 1 && givesCheckQuick(move, side)) score += 220_000;
+  if (!target && ply <= 1) {
+    const beforeThreat = threatScoreForSide(side);
+    const captured = applyTempMove(move);
+    const afterThreat = threatScoreForSide(side);
+    undoTempMove(move, captured);
+    const delta = afterThreat - beforeThreat;
+    score += delta * 40;
+    if (delta <= 0) score -= 3_000;
+  }
   return score;
 }
 
@@ -1013,26 +1460,28 @@ function waitFrame() {
 async function suggestMoveAsync(maxDepth) {
   isThinking = true;
   suggestBtn.disabled = true;
-  resetSearchState(maxDepth);
+  const dynamicInfo = estimateDynamicDepth(maxDepth);
+  const dynamicDepth = dynamicInfo.depth;
+  resetSearchState(dynamicDepth);
   progressBarEl.style.width = "0%";
-  progressTextEl.textContent = "計算中...";
-  updateAnalysis("計算中，請稍候…", false);
+  progressTextEl.textContent = `計算中... (動態深度 ${dynamicDepth})`;
+  updateAnalysis(`計算中，請稍候… (動態深度 ${dynamicDepth})`, false);
   let best = null;
   const start = performance.now();
-  const timeLimit = timeBudgetForDepth(maxDepth);
+  const timeLimit = timeBudgetForDepth(dynamicDepth);
   let finishedDepth = 0;
-  for (let depth = 1; depth <= maxDepth; depth++) {
+  for (let depth = 1; depth <= dynamicDepth; depth++) {
     if (performance.now() - start > timeLimit) break;
     await waitFrame();
     best = searchBestMove(depth);
     finishedDepth = depth;
-    updateProgress(depth, maxDepth);
+    updateProgress(depth, dynamicDepth);
     if (best && Math.abs(best.score) > 90000) break;
     if (performance.now() - start > timeLimit) break;
     await waitFrame();
   }
   const elapsed = Math.round(performance.now() - start);
-  progressTextEl.textContent = `完成深度 ${finishedDepth}/${maxDepth}（${elapsed}ms）`;
+  progressTextEl.textContent = `完成深度 ${finishedDepth}/${dynamicDepth}（${elapsed}ms）`;
   suggestBtn.disabled = false;
   isThinking = false;
   return best;
@@ -1048,8 +1497,17 @@ suggestBtn.addEventListener("click", async () => {
   }
   const piece = board[result.move.from[0]][result.move.from[1]];
   const sideName = isSidePiece(piece, "r") ? "紅" : "黑";
-  const text = `建議：${sideName}${PIECES[piece].name} ${formatMove(result.move)}（評分 ${result.score}）`;
-  updateAnalysis(text, false);
+  const lines = [`建議：${sideName}${PIECES[piece].name} ${formatMove(result.move)}（評分 ${result.score}）`];
+  if (result.candidates && result.candidates.length > 1) {
+    const options = result.candidates.map((item, idx) => {
+      const cpiece = board[item.move.from[0]][item.move.from[1]];
+      const cname = isSidePiece(cpiece, "r") ? "紅" : "黑";
+      return `${idx + 1}. ${cname}${PIECES[cpiece].name} ${formatMove(item.move)}（評分 ${item.score}）`;
+    });
+    lines.push("候選：");
+    lines.push(...options);
+  }
+  updateAnalysis(lines.join("\n"), false);
   legalMovesCache = [result.move];
   selectedFrom = result.move.from;
   renderBoard();

@@ -9,6 +9,7 @@
   --wood: #c9a772;
   --grid: rgba(31, 28, 25, 0.35);
   --shadow: 0 10px 30px rgba(31, 28, 25, 0.18);
+  --analysis-height: 140px;
 }
 
 * { box-sizing: border-box; }
@@ -278,9 +279,10 @@ button:disabled {
   background: #fffaf1;
   border-radius: 12px;
   padding: 12px;
-  min-height: 68px;
+  height: var(--analysis-height);
   border: 1px dashed rgba(31, 28, 25, 0.2);
   white-space: pre-line;
+  overflow-y: auto;
 }
 
 .progress {
