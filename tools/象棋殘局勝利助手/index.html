@@ -550,10 +550,15 @@
     }
 
     function selectPalette(id, button) {
-      selectedPalette = id;
       selectedFrom = null;
       legalMovesCache = [];
       Array.from(paletteEl.querySelectorAll("button")).forEach((b) => b.classList.remove("active"));
+      if (selectedPalette === id) {
+        selectedPalette = null;
+        renderBoard();
+        return;
+      }
+      selectedPalette = id;
       button.classList.add("active");
       renderBoard();
     }
