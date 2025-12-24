@@ -1,0 +1,1211 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>象棋殘局勝利助手</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700&family=Chakra+Petch:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f2efe6;
+      --ink: #1f1c19;
+      --paper: #fbf7ee;
+      --accent: #b5481e;
+      --accent-2: #1c6e6b;
+      --red: #c43a2f;
+      --black: #222;
+      --wood: #c9a772;
+      --grid: rgba(31, 28, 25, 0.35);
+      --shadow: 0 10px 30px rgba(31, 28, 25, 0.18);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Noto Serif TC", serif;
+      color: var(--ink);
+      background:
+        radial-gradient(1200px 700px at 10% 10%, #fff8ea 0%, transparent 60%),
+        radial-gradient(1000px 600px at 90% 20%, #f2d7b8 0%, transparent 55%),
+        linear-gradient(160deg, #f7f2e8 0%, #e9ddc7 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: stretch;
+      justify-content: center;
+    }
+
+    .app {
+      width: min(1200px, 96vw);
+      margin: 28px auto;
+      display: grid;
+      grid-template-columns: minmax(320px, 1fr) minmax(300px, 0.95fr);
+      gap: 28px;
+      animation: rise 800ms ease both;
+    }
+
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 2px solid rgba(31, 28, 25, 0.15);
+      padding-bottom: 14px;
+    }
+
+    header h1 {
+      margin: 0;
+      font-size: clamp(24px, 3vw, 36px);
+      letter-spacing: 1px;
+    }
+
+    header .tagline {
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 13px;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      letter-spacing: 1.6px;
+    }
+
+    .board-panel {
+      background: var(--paper);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .board-panel::before {
+      content: "";
+      position: absolute;
+      inset: -40px;
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(31, 28, 25, 0.06) 0px,
+        rgba(31, 28, 25, 0.06) 2px,
+        transparent 2px,
+        transparent 10px
+      );
+      opacity: 0.4;
+      pointer-events: none;
+    }
+
+    .board-wrap {
+      position: relative;
+      aspect-ratio: 9 / 10;
+      width: min(70vw, 520px);
+      margin: 0 auto;
+      background: linear-gradient(180deg, #d7b37a 0%, #c9a772 100%);
+      border-radius: 12px;
+      box-shadow: inset 0 0 0 2px rgba(31, 28, 25, 0.2);
+    }
+
+    .board-area {
+      position: absolute;
+      inset: 14px;
+    }
+
+    .board-lines {
+      position: absolute;
+      inset: 0;
+      z-index: 1;
+      pointer-events: none;
+    }
+
+    .piece-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 3;
+      pointer-events: none;
+      overflow: visible;
+    }
+
+    .marker-layer {
+      position: absolute;
+      inset: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .board-grid {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      grid-template-rows: repeat(10, 1fr);
+      gap: 0;
+      z-index: 2;
+      pointer-events: none;
+    }
+
+    .cell {
+      position: relative;
+      font-size: clamp(18px, 2vw, 26px);
+      user-select: none;
+    }
+
+    .cell.river {
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .cell.highlight {
+      background: none;
+    }
+
+    .cell.move {
+      background: none;
+    }
+
+    .hitmap {
+      position: absolute;
+      inset: 0;
+      z-index: 4;
+      pointer-events: auto;
+    }
+
+    .hit {
+      position: absolute;
+      width: calc(100% / 8);
+      height: calc(100% / 9);
+      transform: translate(-50%, -50%);
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    .hit:hover {
+      background: rgba(31, 28, 25, 0.08);
+    }
+
+    .marker {
+      position: absolute;
+      width: min(20px, 2.2vw);
+      height: min(20px, 2.2vw);
+      min-width: 14px;
+      min-height: 14px;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      background: radial-gradient(circle, rgba(180, 72, 30, 0.35) 0%, transparent 65%);
+    }
+
+    .marker.move {
+      background: radial-gradient(circle, rgba(28, 110, 107, 0.35) 0%, transparent 65%);
+    }
+
+    .piece-circle {
+      fill: #f7f2e8;
+      stroke: rgba(31, 28, 25, 0.45);
+      stroke-width: 0.05;
+      filter: drop-shadow(0 0.12px 0.22px rgba(31, 28, 25, 0.25));
+    }
+
+    .piece-text {
+      font-weight: 700;
+      font-size: 0.46px;
+      text-anchor: middle;
+      dominant-baseline: central;
+      font-family: "Noto Serif TC", serif;
+    }
+
+    .piece-text.red {
+      color: var(--red);
+      fill: var(--red);
+    }
+
+    .piece-circle.red {
+      stroke: rgba(196, 58, 47, 0.65);
+    }
+
+    .piece-text.black {
+      color: var(--black);
+      fill: var(--black);
+    }
+
+    .piece-circle.black {
+      stroke: rgba(34, 34, 34, 0.6);
+    }
+
+    .controls {
+      background: var(--paper);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: var(--shadow);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .section-title {
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 13px;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      margin: 0 0 8px 0;
+    }
+
+    .palette {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .palette button {
+      font-family: "Noto Serif TC", serif;
+      border: 1px solid rgba(31, 28, 25, 0.25);
+      background: #fff;
+      padding: 8px 6px;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 120ms ease, box-shadow 120ms ease;
+    }
+
+    .palette button.active {
+      box-shadow: 0 6px 10px rgba(180, 72, 30, 0.2);
+      transform: translateY(-2px);
+      border-color: rgba(180, 72, 30, 0.7);
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .toolbar button,
+    .toolbar select {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(31, 28, 25, 0.2);
+      background: #fff;
+      font-family: "Chakra Petch", sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .analysis {
+      background: #fff8ee;
+      border-radius: 12px;
+      padding: 12px;
+      border: 1px dashed rgba(31, 28, 25, 0.25);
+      min-height: 110px;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .progress {
+      background: #f0e6d6;
+      border-radius: 999px;
+      height: 10px;
+      overflow: hidden;
+      border: 1px solid rgba(31, 28, 25, 0.2);
+    }
+
+    .progress > span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #1c6e6b 0%, #b5481e 100%);
+      transition: width 160ms ease;
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: rgba(31, 28, 25, 0.65);
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 90px;
+      padding: 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(31, 28, 25, 0.2);
+      font-family: "Chakra Petch", monospace;
+      font-size: 12px;
+      resize: vertical;
+    }
+
+    .hint {
+      font-size: 12px;
+      color: rgba(31, 28, 25, 0.65);
+    }
+
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 900px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .board-wrap {
+        width: min(86vw, 520px);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div>
+        <h1>象棋殘局勝利助手</h1>
+        <div class="tagline">Endgame Planner for Xiangqi</div>
+      </div>
+      <div class="hint">先設局面，再按「建議一步」</div>
+    </header>
+
+    <section class="board-panel">
+      <div class="board-wrap">
+        <div class="board-area">
+          <svg class="board-lines" viewBox="0 0 8 9" preserveAspectRatio="none" aria-hidden="true">
+            <g stroke="rgba(31, 28, 25, 0.45)" stroke-width="0.03" fill="none">
+              <!-- Horizontal lines -->
+              <line x1="0" y1="0" x2="8" y2="0" />
+              <line x1="0" y1="1" x2="8" y2="1" />
+              <line x1="0" y1="2" x2="8" y2="2" />
+              <line x1="0" y1="3" x2="8" y2="3" />
+              <line x1="0" y1="4" x2="8" y2="4" />
+              <line x1="0" y1="5" x2="8" y2="5" />
+              <line x1="0" y1="6" x2="8" y2="6" />
+              <line x1="0" y1="7" x2="8" y2="7" />
+              <line x1="0" y1="8" x2="8" y2="8" />
+              <line x1="0" y1="9" x2="8" y2="9" />
+
+              <!-- Vertical lines broken by river -->
+              <line x1="0" y1="0" x2="0" y2="4" />
+              <line x1="0" y1="5" x2="0" y2="9" />
+              <line x1="1" y1="0" x2="1" y2="4" />
+              <line x1="1" y1="5" x2="1" y2="9" />
+              <line x1="2" y1="0" x2="2" y2="4" />
+              <line x1="2" y1="5" x2="2" y2="9" />
+              <line x1="3" y1="0" x2="3" y2="4" />
+              <line x1="3" y1="5" x2="3" y2="9" />
+              <line x1="4" y1="0" x2="4" y2="4" />
+              <line x1="4" y1="5" x2="4" y2="9" />
+              <line x1="5" y1="0" x2="5" y2="4" />
+              <line x1="5" y1="5" x2="5" y2="9" />
+              <line x1="6" y1="0" x2="6" y2="4" />
+              <line x1="6" y1="5" x2="6" y2="9" />
+              <line x1="7" y1="0" x2="7" y2="4" />
+              <line x1="7" y1="5" x2="7" y2="9" />
+              <line x1="8" y1="0" x2="8" y2="4" />
+              <line x1="8" y1="5" x2="8" y2="9" />
+
+              <!-- Palace diagonals -->
+              <line x1="3" y1="0" x2="5" y2="2" />
+              <line x1="5" y1="0" x2="3" y2="2" />
+              <line x1="3" y1="7" x2="5" y2="9" />
+              <line x1="5" y1="7" x2="3" y2="9" />
+            </g>
+            <g fill="rgba(31, 28, 25, 0.55)" font-size="0.35" font-family="Noto Serif TC, serif">
+              <text x="1.4" y="4.65">楚河</text>
+              <text x="4.6" y="4.65">漢界</text>
+            </g>
+          </svg>
+          <div id="marker-layer" class="marker-layer"></div>
+          <svg id="piece-layer" class="piece-layer" viewBox="0 0 8 9" preserveAspectRatio="none" aria-hidden="true"></svg>
+          <div id="board" class="board-grid"></div>
+          <div id="hitmap" class="hitmap"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <div>
+        <div class="section-title">局面設定</div>
+        <div class="palette" id="palette"></div>
+      </div>
+
+      <div>
+        <div class="section-title">操作</div>
+        <div class="toolbar">
+          <button id="clear">清空盤面</button>
+          <button id="reset">標準開局</button>
+          <button id="toggle-side">輪到：紅方</button>
+          <button id="suggest">建議一步</button>
+        </div>
+        <div class="toolbar">
+          <label>
+            <select id="depth-select">
+              <option value="2">深度 2</option>
+              <option value="3" selected>深度 3</option>
+              <option value="4">深度 4</option>
+              <option value="5">深度 5</option>
+            </select>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <div class="section-title">勝利輔助</div>
+        <div id="analysis" class="analysis">等待你設定局面。</div>
+      </div>
+
+      <div>
+        <div class="section-title">計算進度</div>
+        <div class="progress"><span id="progress-bar"></span></div>
+        <div id="progress-text" class="progress-text">尚未開始</div>
+      </div>
+
+      <div class="field">
+        <div class="section-title">盤面碼</div>
+        <textarea id="boardcode" spellcheck="false"></textarea>
+        <div class="toolbar">
+          <button id="export">匯出盤面</button>
+          <button id="import">匯入盤面</button>
+        </div>
+        <div class="hint">使用 10 行 / 分隔，紅方大寫、黑方小寫，空格用 .</div>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const PIECES = {
+      K: { name: "帥", color: "red", value: 10000 },
+      A: { name: "仕", color: "red", value: 180 },
+      E: { name: "相", color: "red", value: 180 },
+      H: { name: "馬", color: "red", value: 320 },
+      R: { name: "車", color: "red", value: 600 },
+      C: { name: "炮", color: "red", value: 380 },
+      P: { name: "兵", color: "red", value: 100 },
+      k: { name: "將", color: "black", value: 10000 },
+      a: { name: "士", color: "black", value: 180 },
+      e: { name: "象", color: "black", value: 180 },
+      h: { name: "馬", color: "black", value: 320 },
+      r: { name: "車", color: "black", value: 600 },
+      c: { name: "炮", color: "black", value: 380 },
+      p: { name: "卒", color: "black", value: 100 },
+    };
+
+    const BOARD_ROWS = 10;
+    const BOARD_COLS = 9;
+
+    let board = createEmptyBoard();
+    let sideToMove = "r";
+    const EMPTY_TOKEN = "_";
+    let selectedPalette = null;
+    let selectedFrom = null;
+    let legalMovesCache = [];
+
+    const boardEl = document.getElementById("board");
+    const pieceLayerEl = document.getElementById("piece-layer");
+    const markerLayerEl = document.getElementById("marker-layer");
+    const hitmapEl = document.getElementById("hitmap");
+    const paletteEl = document.getElementById("palette");
+    const analysisEl = document.getElementById("analysis");
+    const progressBarEl = document.getElementById("progress-bar");
+    const progressTextEl = document.getElementById("progress-text");
+    const suggestBtn = document.getElementById("suggest");
+    const depthSelectEl = document.getElementById("depth-select");
+    const boardCodeEl = document.getElementById("boardcode");
+
+    function createEmptyBoard() {
+      return Array.from({ length: BOARD_ROWS }, () => Array(BOARD_COLS).fill(null));
+    }
+
+    function setupBoard() {
+      board = createEmptyBoard();
+      const initial = [
+        "rheakaehr",
+        ".........",
+        ".c.....c.",
+        "p.p.p.p.p",
+        ".........",
+        ".........",
+        "P.P.P.P.P",
+        ".C.....C.",
+        ".........",
+        "RHEAKAEHR",
+      ];
+      initial.forEach((row, r) => {
+        row.split("").forEach((ch, c) => {
+          if (ch !== ".") board[r][c] = ch;
+        });
+      });
+    }
+
+    function buildPalette() {
+      const pieceOrder = ["K", "A", "E", "H", "R", "C", "P", "k", "a", "e", "h", "r", "c", "p"];
+      paletteEl.innerHTML = "";
+      const emptyBtn = document.createElement("button");
+      emptyBtn.textContent = "清除";
+      emptyBtn.addEventListener("click", () => selectPalette(EMPTY_TOKEN, emptyBtn));
+      paletteEl.appendChild(emptyBtn);
+      pieceOrder.forEach((id) => {
+        const btn = document.createElement("button");
+        btn.textContent = PIECES[id].name + (id === id.toUpperCase() ? "(紅)" : "(黑)");
+        btn.addEventListener("click", () => selectPalette(id, btn));
+        paletteEl.appendChild(btn);
+      });
+    }
+
+    function selectPalette(id, button) {
+      selectedPalette = id;
+      selectedFrom = null;
+      legalMovesCache = [];
+      Array.from(paletteEl.querySelectorAll("button")).forEach((b) => b.classList.remove("active"));
+      button.classList.add("active");
+      renderBoard();
+    }
+
+    function renderBoard() {
+      boardEl.innerHTML = "";
+      pieceLayerEl.innerHTML = "";
+      markerLayerEl.innerHTML = "";
+      hitmapEl.innerHTML = "";
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const cell = document.createElement("div");
+          cell.className = "cell" + (r === 4 || r === 5 ? " river" : "");
+          boardEl.appendChild(cell);
+        }
+      }
+      renderHitmap();
+      renderMarkers();
+      renderPieces();
+    }
+
+    function renderHitmap() {
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const hit = document.createElement("div");
+          hit.className = "hit";
+          hit.dataset.row = r;
+          hit.dataset.col = c;
+          hit.style.left = `${(c / (BOARD_COLS - 1)) * 100}%`;
+          hit.style.top = `${(r / (BOARD_ROWS - 1)) * 100}%`;
+          hit.addEventListener("click", handleCellClick);
+          hitmapEl.appendChild(hit);
+        }
+      }
+    }
+
+    function renderMarkers() {
+      const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+      svg.setAttribute("viewBox", "0 0 8 9");
+      svg.setAttribute("preserveAspectRatio", "none");
+      svg.setAttribute("width", "100%");
+      svg.setAttribute("height", "100%");
+      const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+      const marker = document.createElementNS("http://www.w3.org/2000/svg", "marker");
+      marker.setAttribute("id", "arrow");
+      marker.setAttribute("markerUnits", "userSpaceOnUse");
+      marker.setAttribute("markerWidth", "0.5");
+      marker.setAttribute("markerHeight", "0.5");
+      marker.setAttribute("refX", "0.45");
+      marker.setAttribute("refY", "0.25");
+      marker.setAttribute("orient", "auto");
+      const arrowPath = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      arrowPath.setAttribute("d", "M0,0 L0.5,0.25 L0,0.5 Z");
+      arrowPath.setAttribute("fill", "rgba(28, 110, 107, 0.8)");
+      marker.appendChild(arrowPath);
+      defs.appendChild(marker);
+      svg.appendChild(defs);
+
+      legalMovesCache.forEach((move) => {
+        const x1 = move.from[1];
+        const y1 = move.from[0];
+        const x2 = move.to[1];
+        const y2 = move.to[0];
+
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", x1);
+        line.setAttribute("y1", y1);
+        line.setAttribute("x2", x2);
+        line.setAttribute("y2", y2);
+        line.setAttribute("stroke", "rgba(28, 110, 107, 0.7)");
+        line.setAttribute("stroke-width", "0.08");
+        line.setAttribute("marker-end", "url(#arrow)");
+        svg.appendChild(line);
+
+        const fromDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        fromDot.setAttribute("cx", x1);
+        fromDot.setAttribute("cy", y1);
+        fromDot.setAttribute("r", "0.18");
+        fromDot.setAttribute("fill", "rgba(180, 72, 30, 0.7)");
+        svg.appendChild(fromDot);
+
+        const toDot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+        toDot.setAttribute("cx", x2);
+        toDot.setAttribute("cy", y2);
+        toDot.setAttribute("r", "0.2");
+        toDot.setAttribute("fill", "rgba(28, 110, 107, 0.75)");
+        svg.appendChild(toDot);
+      });
+
+      markerLayerEl.appendChild(svg);
+    }
+
+    function renderPieces() {
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const piece = board[r][c];
+          if (!piece) continue;
+          const color = PIECES[piece].color;
+          const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+          const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          const text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+
+          circle.setAttribute("cx", c);
+          circle.setAttribute("cy", r);
+          circle.setAttribute("r", "0.36");
+          circle.setAttribute("class", `piece-circle ${color}`);
+
+          text.setAttribute("x", c);
+          text.setAttribute("y", r);
+          text.setAttribute("class", `piece-text ${color}`);
+          text.textContent = PIECES[piece].name;
+
+          group.appendChild(circle);
+          group.appendChild(text);
+          pieceLayerEl.appendChild(group);
+        }
+      }
+    }
+    function handleCellClick(e) {
+      const r = Number(e.currentTarget.dataset.row);
+      const c = Number(e.currentTarget.dataset.col);
+
+      if (selectedPalette !== null) {
+        board[r][c] = selectedPalette === EMPTY_TOKEN ? null : selectedPalette;
+        renderBoard();
+        return;
+      }
+
+      const piece = board[r][c];
+      if (selectedFrom) {
+        const move = legalMovesCache.find((m) => m.to[0] === r && m.to[1] === c);
+        if (move) {
+          makeMove(move);
+          selectedFrom = null;
+          legalMovesCache = [];
+          renderBoard();
+          updateAnalysis("已移動，輪到" + (sideToMove === "r" ? "紅方" : "黑方") + "。", true);
+          return;
+        }
+      }
+
+      if (piece && isSidePiece(piece, sideToMove)) {
+        selectedFrom = [r, c];
+        legalMovesCache = getLegalMoves(sideToMove).filter((m) => m.from[0] === r && m.from[1] === c);
+      } else {
+        selectedFrom = null;
+        legalMovesCache = [];
+      }
+      renderBoard();
+    }
+
+    function makeMove(move) {
+      const piece = board[move.from[0]][move.from[1]];
+      board[move.from[0]][move.from[1]] = null;
+      board[move.to[0]][move.to[1]] = piece;
+      sideToMove = sideToMove === "r" ? "b" : "r";
+    }
+
+    function isSidePiece(piece, side) {
+      return side === "r" ? piece === piece.toUpperCase() : piece === piece.toLowerCase();
+    }
+
+    function updateAnalysis(text, append = false) {
+      analysisEl.textContent = append ? analysisEl.textContent + "\n" + text : text;
+    }
+
+    function insideBoard(r, c) {
+      return r >= 0 && r < BOARD_ROWS && c >= 0 && c < BOARD_COLS;
+    }
+
+    function findKing(side) {
+      const target = side === "r" ? "K" : "k";
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          if (board[r][c] === target) return [r, c];
+        }
+      }
+      return null;
+    }
+
+    function getLegalMoves(side) {
+      const moves = [];
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const piece = board[r][c];
+          if (!piece || !isSidePiece(piece, side)) continue;
+          const pseudo = getPseudoMoves(piece, r, c);
+          pseudo.forEach((move) => {
+            if (isLegalMove(move, side)) moves.push(move);
+          });
+        }
+      }
+      return moves;
+    }
+
+    function isLegalMove(move, side) {
+      const snapshot = board[move.to[0]][move.to[1]];
+      const piece = board[move.from[0]][move.from[1]];
+      board[move.from[0]][move.from[1]] = null;
+      board[move.to[0]][move.to[1]] = piece;
+      const legal = !isInCheck(side);
+      board[move.from[0]][move.from[1]] = piece;
+      board[move.to[0]][move.to[1]] = snapshot;
+      return legal;
+    }
+
+    function isInCheck(side) {
+      const kingPos = findKing(side);
+      if (!kingPos) return true;
+      return isSquareAttacked(kingPos[0], kingPos[1], side === "r" ? "b" : "r");
+    }
+
+    function isSquareAttacked(r, c, attackerSide) {
+      const enemyMoves = getPseudoMovesForSide(attackerSide, true);
+      return enemyMoves.some((m) => m.to[0] === r && m.to[1] === c);
+    }
+
+    function getPseudoMovesForSide(side, attackOnly = false) {
+      const moves = [];
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const piece = board[r][c];
+          if (!piece || !isSidePiece(piece, side)) continue;
+          moves.push(...getPseudoMoves(piece, r, c, attackOnly));
+        }
+      }
+      return moves;
+    }
+
+    function getPseudoMoves(piece, r, c, attackOnly = false) {
+      const moves = [];
+      const isRed = piece === piece.toUpperCase();
+      const side = isRed ? "r" : "b";
+      const own = (rr, cc) => board[rr][cc] && isSidePiece(board[rr][cc], side);
+      const enemy = (rr, cc) => board[rr][cc] && !isSidePiece(board[rr][cc], side);
+
+      const add = (rr, cc) => {
+        if (!insideBoard(rr, cc) || own(rr, cc)) return;
+        if (attackOnly && !enemy(rr, cc)) return;
+        moves.push({ from: [r, c], to: [rr, cc] });
+      };
+
+      switch (piece.toUpperCase()) {
+        case "K": {
+          const palaceRows = isRed ? [7, 9] : [0, 2];
+          const palaceCols = [3, 5];
+          const steps = [
+            [1, 0], [-1, 0], [0, 1], [0, -1]
+          ];
+          steps.forEach(([dr, dc]) => {
+            const rr = r + dr;
+            const cc = c + dc;
+            if (rr >= palaceRows[0] && rr <= palaceRows[1] && cc >= palaceCols[0] && cc <= palaceCols[1]) {
+              add(rr, cc);
+            }
+          });
+          const dir = isRed ? -1 : 1;
+          let rr = r + dir;
+          while (insideBoard(rr, c)) {
+            if (board[rr][c]) {
+              if (board[rr][c].toUpperCase() === "K") {
+                moves.push({ from: [r, c], to: [rr, c] });
+              }
+              break;
+            }
+            rr += dir;
+          }
+          break;
+        }
+        case "A": {
+          const palaceRows = isRed ? [7, 9] : [0, 2];
+          const palaceCols = [3, 5];
+          [[1, 1], [1, -1], [-1, 1], [-1, -1]].forEach(([dr, dc]) => {
+            const rr = r + dr;
+            const cc = c + dc;
+            if (rr >= palaceRows[0] && rr <= palaceRows[1] && cc >= palaceCols[0] && cc <= palaceCols[1]) {
+              add(rr, cc);
+            }
+          });
+          break;
+        }
+        case "E": {
+          const riverLimit = isRed ? 4 : 5;
+          [[2, 2], [2, -2], [-2, 2], [-2, -2]].forEach(([dr, dc]) => {
+            const rr = r + dr;
+            const cc = c + dc;
+            const eyeR = r + dr / 2;
+            const eyeC = c + dc / 2;
+            if (!insideBoard(rr, cc) || board[eyeR][eyeC]) return;
+            if (isRed && rr < riverLimit) return;
+            if (!isRed && rr > riverLimit) return;
+            add(rr, cc);
+          });
+          break;
+        }
+        case "H": {
+          const candidates = [
+            [2, 1, 1, 0], [2, -1, 1, 0], [-2, 1, -1, 0], [-2, -1, -1, 0],
+            [1, 2, 0, 1], [1, -2, 0, -1], [-1, 2, 0, 1], [-1, -2, 0, -1]
+          ];
+          candidates.forEach(([dr, dc, br, bc]) => {
+            const blockR = r + br;
+            const blockC = c + bc;
+            const rr = r + dr;
+            const cc = c + dc;
+            if (!insideBoard(rr, cc) || board[blockR][blockC]) return;
+            add(rr, cc);
+          });
+          break;
+        }
+        case "R": {
+          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          dirs.forEach(([dr, dc]) => {
+            let rr = r + dr;
+            let cc = c + dc;
+            while (insideBoard(rr, cc)) {
+              if (!board[rr][cc]) {
+                if (!attackOnly) moves.push({ from: [r, c], to: [rr, cc] });
+              } else {
+                if (enemy(rr, cc)) moves.push({ from: [r, c], to: [rr, cc] });
+                break;
+              }
+              rr += dr;
+              cc += dc;
+            }
+          });
+          break;
+        }
+        case "C": {
+          const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+          dirs.forEach(([dr, dc]) => {
+            let rr = r + dr;
+            let cc = c + dc;
+            let screen = false;
+            while (insideBoard(rr, cc)) {
+              if (!screen) {
+                if (!board[rr][cc]) {
+                  if (!attackOnly) moves.push({ from: [r, c], to: [rr, cc] });
+                } else {
+                  screen = true;
+                }
+              } else {
+                if (board[rr][cc]) {
+                  if (enemy(rr, cc)) moves.push({ from: [r, c], to: [rr, cc] });
+                  break;
+                }
+              }
+              rr += dr;
+              cc += dc;
+            }
+          });
+          break;
+        }
+        case "P": {
+          const dir = isRed ? -1 : 1;
+          const forwardR = r + dir;
+          if (insideBoard(forwardR, c)) add(forwardR, c);
+          const crossed = isRed ? r <= 4 : r >= 5;
+          if (crossed) {
+            if (insideBoard(r, c + 1)) add(r, c + 1);
+            if (insideBoard(r, c - 1)) add(r, c - 1);
+          }
+          break;
+        }
+      }
+      return moves;
+    }
+
+    function evaluateBoard() {
+      let score = 0;
+      let redKing = false;
+      let blackKing = false;
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const piece = board[r][c];
+          if (!piece) continue;
+          const isRed = piece === piece.toUpperCase();
+          const val = PIECES[piece].value;
+          score += isRed ? val : -val;
+          score += isRed ? positionalBonus(piece, r, c) : -positionalBonus(piece, r, c);
+          if (piece === "K") redKing = true;
+          if (piece === "k") blackKing = true;
+        }
+      }
+      if (!redKing) return -99999;
+      if (!blackKing) return 99999;
+      const mobility = getLegalMoves("r").length - getLegalMoves("b").length;
+      score += mobility * 2;
+      return score;
+    }
+
+    function positionalBonus(piece, r, c) {
+      const isRed = piece === piece.toUpperCase();
+      const rr = isRed ? r : 9 - r;
+      const centerDist = Math.abs(c - 4) + Math.abs(rr - 4.5);
+      const centerBonus = Math.max(0, 10 - centerDist * 2);
+      switch (piece.toUpperCase()) {
+        case "P": {
+          const advance = (9 - rr) * 2;
+          const crossed = rr <= 4 ? 6 : 0;
+          return advance + crossed;
+        }
+        case "R":
+        case "C":
+        case "H":
+          return centerBonus;
+        case "K":
+          return rr <= 2 ? 6 : 0;
+        default:
+          return 0;
+      }
+    }
+
+    function searchBestMove(depth) {
+      const side = sideToMove;
+      const moves = getLegalMoves(side);
+      if (moves.length === 0) {
+        const status = isInCheck(side) ? "被將死" : "無子可走";
+        return { move: null, score: side === "r" ? -99999 : 99999, status };
+      }
+
+      let bestScore = side === "r" ? -Infinity : Infinity;
+      let bestMoves = [];
+
+      const ordered = orderMoves(moves, side);
+      ordered.forEach((move) => {
+        const captured = board[move.to[0]][move.to[1]];
+        const piece = board[move.from[0]][move.from[1]];
+        board[move.from[0]][move.from[1]] = null;
+        board[move.to[0]][move.to[1]] = piece;
+        const score = minimax(depth - 1, side === "r" ? "b" : "r", -Infinity, Infinity);
+        board[move.from[0]][move.from[1]] = piece;
+        board[move.to[0]][move.to[1]] = captured;
+
+        if ((side === "r" && score > bestScore) || (side === "b" && score < bestScore)) {
+          bestScore = score;
+          bestMoves = [{ move, score }];
+        } else if (score === bestScore) {
+          bestMoves.push({ move, score });
+        }
+      });
+
+      return { move: bestMoves[0].move, score: bestScore, candidates: bestMoves };
+    }
+
+    function minimax(depth, side, alpha, beta) {
+      if (depth === 0) return quiescence(side, alpha, beta, 2);
+      const moves = getLegalMoves(side);
+      if (moves.length === 0) {
+        if (isInCheck(side)) return side === "r" ? -99999 : 99999;
+        return 0;
+      }
+
+      if (side === "r") {
+        let value = -Infinity;
+        const ordered = orderMoves(moves, side);
+        for (const move of ordered) {
+          const captured = board[move.to[0]][move.to[1]];
+          const piece = board[move.from[0]][move.from[1]];
+          board[move.from[0]][move.from[1]] = null;
+          board[move.to[0]][move.to[1]] = piece;
+          value = Math.max(value, minimax(depth - 1, "b", alpha, beta));
+          board[move.from[0]][move.from[1]] = piece;
+          board[move.to[0]][move.to[1]] = captured;
+          alpha = Math.max(alpha, value);
+          if (alpha >= beta) break;
+        }
+        return value;
+      }
+
+      let value = Infinity;
+      const ordered = orderMoves(moves, side);
+      for (const move of ordered) {
+        const captured = board[move.to[0]][move.to[1]];
+        const piece = board[move.from[0]][move.from[1]];
+        board[move.from[0]][move.from[1]] = null;
+        board[move.to[0]][move.to[1]] = piece;
+        value = Math.min(value, minimax(depth - 1, "r", alpha, beta));
+        board[move.from[0]][move.from[1]] = piece;
+        board[move.to[0]][move.to[1]] = captured;
+        beta = Math.min(beta, value);
+        if (alpha >= beta) break;
+      }
+      return value;
+    }
+
+    function quiescence(side, alpha, beta, depth) {
+      const standPat = evaluateBoard();
+      if (depth === 0) return standPat;
+      if (side === "r") {
+        if (standPat > alpha) alpha = standPat;
+        if (alpha >= beta) return beta;
+      } else {
+        if (standPat < beta) beta = standPat;
+        if (alpha >= beta) return alpha;
+      }
+      const captures = getLegalMoves(side).filter((m) => board[m.to[0]][m.to[1]]);
+      const ordered = orderMoves(captures, side);
+      for (const move of ordered) {
+        const captured = board[move.to[0]][move.to[1]];
+        const piece = board[move.from[0]][move.from[1]];
+        board[move.from[0]][move.from[1]] = null;
+        board[move.to[0]][move.to[1]] = piece;
+        const score = quiescence(side === "r" ? "b" : "r", alpha, beta, depth - 1);
+        board[move.from[0]][move.from[1]] = piece;
+        board[move.to[0]][move.to[1]] = captured;
+        if (side === "r") {
+          if (score > alpha) alpha = score;
+          if (alpha >= beta) break;
+        } else {
+          if (score < beta) beta = score;
+          if (alpha >= beta) break;
+        }
+      }
+      return side === "r" ? alpha : beta;
+    }
+
+    function orderMoves(moves, side) {
+      return moves.slice().sort((a, b) => scoreMove(b, side) - scoreMove(a, side));
+    }
+
+    function scoreMove(move, side) {
+      const attacker = board[move.from[0]][move.from[1]];
+      const target = board[move.to[0]][move.to[1]];
+      let score = 0;
+      if (target) {
+        score += (PIECES[target].value - PIECES[attacker].value / 10);
+      }
+      if (side === "r" && move.to[0] <= 2) score += 15;
+      if (side === "b" && move.to[0] >= 7) score += 15;
+      return score;
+    }
+
+    function formatMove(move) {
+      const file = (c) => String.fromCharCode(97 + c);
+      const from = file(move.from[1]) + (9 - move.from[0]);
+      const to = file(move.to[1]) + (9 - move.to[0]);
+      return from + "→" + to;
+    }
+
+    function exportBoard() {
+      const rows = board.map((row) => row.map((cell) => (cell ? cell : ".")).join(""));
+      boardCodeEl.value = rows.join("/");
+    }
+
+    function importBoard() {
+      const raw = boardCodeEl.value.trim();
+      const rows = raw.split("/");
+      if (rows.length !== 10) {
+        updateAnalysis("盤面碼格式錯誤：需要 10 行。", false);
+        return;
+      }
+      const next = createEmptyBoard();
+      for (let r = 0; r < 10; r++) {
+        const row = rows[r];
+        if (row.length !== 9) {
+          updateAnalysis("盤面碼格式錯誤：第 " + (r + 1) + " 行需要 9 格。", false);
+          return;
+        }
+        for (let c = 0; c < 9; c++) {
+          const ch = row[c];
+          if (ch === ".") continue;
+          if (!PIECES[ch]) {
+            updateAnalysis("盤面碼格式錯誤：未知棋子 " + ch + "。", false);
+            return;
+          }
+          next[r][c] = ch;
+        }
+      }
+      board = next;
+      selectedFrom = null;
+      legalMovesCache = [];
+      renderBoard();
+      updateAnalysis("已匯入盤面。", false);
+    }
+
+    document.getElementById("clear").addEventListener("click", () => {
+      board = createEmptyBoard();
+      selectedFrom = null;
+      legalMovesCache = [];
+      renderBoard();
+      updateAnalysis("盤面已清空。", false);
+    });
+
+    document.getElementById("reset").addEventListener("click", () => {
+      setupBoard();
+      selectedFrom = null;
+      legalMovesCache = [];
+      renderBoard();
+      updateAnalysis("已回到標準開局。", false);
+    });
+
+    document.getElementById("toggle-side").addEventListener("click", (e) => {
+      sideToMove = sideToMove === "r" ? "b" : "r";
+      e.target.textContent = "輪到：" + (sideToMove === "r" ? "紅方" : "黑方");
+      updateAnalysis("輪到" + (sideToMove === "r" ? "紅方" : "黑方") + "。", false);
+    });
+
+    let isThinking = false;
+
+    function updateProgress(current, total) {
+      const percent = Math.round((current / total) * 100);
+      progressBarEl.style.width = `${percent}%`;
+      progressTextEl.textContent = `深度 ${current}/${total}（${percent}%）`;
+    }
+
+    function waitFrame() {
+      return new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+
+    async function suggestMoveAsync(maxDepth) {
+      isThinking = true;
+      suggestBtn.disabled = true;
+      progressBarEl.style.width = "0%";
+      progressTextEl.textContent = "計算中...";
+      updateAnalysis("計算中，請稍候…", false);
+      let best = null;
+      for (let depth = 1; depth <= maxDepth; depth++) {
+        await waitFrame();
+        best = searchBestMove(depth);
+        updateProgress(depth, maxDepth);
+        await waitFrame();
+      }
+      suggestBtn.disabled = false;
+      isThinking = false;
+      return best;
+    }
+
+    suggestBtn.addEventListener("click", async () => {
+      if (isThinking) return;
+      const depth = Number(depthSelectEl.value) || 3;
+      const result = await suggestMoveAsync(depth);
+      if (!result || !result.move) {
+        updateAnalysis("無法建議：" + (result?.status || "無合法步"), false);
+        return;
+      }
+      const piece = board[result.move.from[0]][result.move.from[1]];
+      const sideName = isSidePiece(piece, "r") ? "紅" : "黑";
+      const text = `建議：${sideName}${PIECES[piece].name} ${formatMove(result.move)}（評分 ${result.score}）`;
+      updateAnalysis(text, false);
+      legalMovesCache = [result.move];
+      selectedFrom = result.move.from;
+      renderBoard();
+    });
+
+    document.getElementById("export").addEventListener("click", exportBoard);
+    document.getElementById("import").addEventListener("click", importBoard);
+
+    buildPalette();
+    setupBoard();
+    renderBoard();
+    exportBoard();
+  </script>
+</body>
+</html>
