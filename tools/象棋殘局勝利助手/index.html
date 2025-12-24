@@ -496,6 +496,13 @@
     let selectedPalette = null;
     let selectedFrom = null;
     let legalMovesCache = [];
+    let transpositionTable = new Map();
+    let killerMoves = [];
+    let historyHeuristic = { r: [], b: [] };
+    let zobrist = null;
+    let currentHash = 0n;
+    let repetitionTable = new Map();
+    let repetitionStack = [];
 
     const boardEl = document.getElementById("board");
     const pieceLayerEl = document.getElementById("piece-layer");
@@ -511,6 +518,45 @@
 
     function createEmptyBoard() {
       return Array.from({ length: BOARD_ROWS }, () => Array(BOARD_COLS).fill(null));
+    }
+
+    function rand64() {
+      const hi = Math.floor(Math.random() * 0x100000000);
+      const lo = Math.floor(Math.random() * 0x100000000);
+      return (BigInt(hi) << 32n) | BigInt(lo);
+    }
+
+    function initZobrist() {
+      zobrist = { pieces: {}, side: rand64() };
+      Object.keys(PIECES).forEach((piece) => {
+        zobrist.pieces[piece] = Array.from({ length: BOARD_ROWS }, () =>
+          Array.from({ length: BOARD_COLS }, () => rand64())
+        );
+      });
+    }
+
+    function computeHash(side) {
+      let h = 0n;
+      for (let r = 0; r < BOARD_ROWS; r++) {
+        for (let c = 0; c < BOARD_COLS; c++) {
+          const piece = board[r][c];
+          if (piece) h ^= zobrist.pieces[piece][r][c];
+        }
+      }
+      if (side === "b") h ^= zobrist.side;
+      return h;
+    }
+
+    function resetSearchState(maxDepth) {
+      transpositionTable = new Map();
+      killerMoves = Array.from({ length: maxDepth + 2 }, () => [null, null]);
+      historyHeuristic = {
+        r: Array.from({ length: BOARD_ROWS * BOARD_COLS }, () => Array(BOARD_ROWS * BOARD_COLS).fill(0)),
+        b: Array.from({ length: BOARD_ROWS * BOARD_COLS }, () => Array(BOARD_ROWS * BOARD_COLS).fill(0)),
+      };
+      currentHash = computeHash(sideToMove);
+      repetitionTable = new Map([[currentHash, 1]]);
+      repetitionStack = [currentHash];
     }
 
     function setupBoard() {
@@ -691,10 +737,11 @@
       if (selectedFrom) {
         const move = legalMovesCache.find((m) => m.to[0] === r && m.to[1] === c);
         if (move) {
-          makeMove(move);
+          applyMove(move);
           selectedFrom = null;
           legalMovesCache = [];
           renderBoard();
+          updateSideLabel();
           updateAnalysis("已移動，輪到" + (sideToMove === "r" ? "紅方" : "黑方") + "。", true);
           return;
         }
@@ -710,7 +757,7 @@
       renderBoard();
     }
 
-    function makeMove(move) {
+    function applyMove(move) {
       const piece = board[move.from[0]][move.from[1]];
       board[move.from[0]][move.from[1]] = null;
       board[move.to[0]][move.to[1]] = piece;
@@ -719,6 +766,11 @@
 
     function isSidePiece(piece, side) {
       return side === "r" ? piece === piece.toUpperCase() : piece === piece.toLowerCase();
+    }
+
+    function updateSideLabel() {
+      const toggleBtn = document.getElementById("toggle-side");
+      toggleBtn.textContent = "輪到：" + (sideToMove === "r" ? "紅方" : "黑方");
     }
 
     function updateAnalysis(text, append = false) {
@@ -983,15 +1035,12 @@
       let bestScore = side === "r" ? -Infinity : Infinity;
       let bestMoves = [];
 
-      const ordered = orderMoves(moves, side);
+      const rootEntry = transpositionTable.get(currentHash);
+      const ordered = orderMoves(moves, side, 0, rootEntry?.bestKey || null);
       ordered.forEach((move) => {
-        const captured = board[move.to[0]][move.to[1]];
-        const piece = board[move.from[0]][move.from[1]];
-        board[move.from[0]][move.from[1]] = null;
-        board[move.to[0]][move.to[1]] = piece;
-        const score = minimax(depth - 1, side === "r" ? "b" : "r", -Infinity, Infinity);
-        board[move.from[0]][move.from[1]] = piece;
-        board[move.to[0]][move.to[1]] = captured;
+        const captured = makeSearchMove(move);
+        const score = minimax(depth - 1, side === "r" ? "b" : "r", -Infinity, Infinity, 1);
+        undoSearchMove(move, captured);
 
         if ((side === "r" && score > bestScore) || (side === "b" && score < bestScore)) {
           bestScore = score;
@@ -1001,10 +1050,13 @@
         }
       });
 
+      const bestKey = bestMoves[0] ? moveKey(bestMoves[0].move) : null;
+      transpositionTable.set(currentHash, { depth, score: bestScore, flag: "exact", bestKey });
       return { move: bestMoves[0].move, score: bestScore, candidates: bestMoves };
     }
 
-    function minimax(depth, side, alpha, beta) {
+    function minimax(depth, side, alpha, beta, ply) {
+      if ((repetitionTable.get(currentHash) || 0) >= 2) return 0;
       if (depth === 0) return quiescence(side, alpha, beta, 2);
       const moves = getLegalMoves(side);
       if (moves.length === 0) {
@@ -1012,40 +1064,83 @@
         return 0;
       }
 
+      const alphaOrig = alpha;
+      const betaOrig = beta;
+      const ttEntry = transpositionTable.get(currentHash);
+      if (ttEntry && ttEntry.depth >= depth) {
+        if (ttEntry.flag === "exact") return ttEntry.score;
+        if (ttEntry.flag === "lower") alpha = Math.max(alpha, ttEntry.score);
+        if (ttEntry.flag === "upper") beta = Math.min(beta, ttEntry.score);
+        if (alpha >= beta) return ttEntry.score;
+      }
+
       if (side === "r") {
         let value = -Infinity;
-        const ordered = orderMoves(moves, side);
+        let bestKey = null;
+        const ordered = orderMoves(moves, side, ply, ttEntry?.bestKey || null);
         for (const move of ordered) {
-          const captured = board[move.to[0]][move.to[1]];
-          const piece = board[move.from[0]][move.from[1]];
-          board[move.from[0]][move.from[1]] = null;
-          board[move.to[0]][move.to[1]] = piece;
-          value = Math.max(value, minimax(depth - 1, "b", alpha, beta));
-          board[move.from[0]][move.from[1]] = piece;
-          board[move.to[0]][move.to[1]] = captured;
-          alpha = Math.max(alpha, value);
-          if (alpha >= beta) break;
+          const captured = makeSearchMove(move);
+          const score = minimax(depth - 1, "b", alpha, beta, ply + 1);
+          undoSearchMove(move, captured);
+          if (score > value) {
+            value = score;
+            bestKey = moveKey(move);
+          }
+          if (value > alpha) alpha = value;
+          if (alpha >= beta) {
+            const cutKey = moveKey(move);
+            if (!captured && killerMoves[ply]) {
+              if (killerMoves[ply][0] !== cutKey) {
+                killerMoves[ply][1] = killerMoves[ply][0];
+                killerMoves[ply][0] = cutKey;
+              }
+            }
+            if (!captured) {
+              const fromIdx = move.from[0] * BOARD_COLS + move.from[1];
+              const toIdx = move.to[0] * BOARD_COLS + move.to[1];
+              historyHeuristic[side][fromIdx][toIdx] += depth * depth;
+            }
+            break;
+          }
         }
+        storeTTEntry(depth, value, alphaOrig, betaOrig, bestKey);
         return value;
       }
 
       let value = Infinity;
-      const ordered = orderMoves(moves, side);
+      let bestKey = null;
+      const ordered = orderMoves(moves, side, ply, ttEntry?.bestKey || null);
       for (const move of ordered) {
-        const captured = board[move.to[0]][move.to[1]];
-        const piece = board[move.from[0]][move.from[1]];
-        board[move.from[0]][move.from[1]] = null;
-        board[move.to[0]][move.to[1]] = piece;
-        value = Math.min(value, minimax(depth - 1, "r", alpha, beta));
-        board[move.from[0]][move.from[1]] = piece;
-        board[move.to[0]][move.to[1]] = captured;
-        beta = Math.min(beta, value);
-        if (alpha >= beta) break;
+        const captured = makeSearchMove(move);
+        const score = minimax(depth - 1, "r", alpha, beta, ply + 1);
+        undoSearchMove(move, captured);
+        if (score < value) {
+          value = score;
+          bestKey = moveKey(move);
+        }
+        if (value < beta) beta = value;
+        if (alpha >= beta) {
+          const cutKey = moveKey(move);
+          if (!captured && killerMoves[ply]) {
+            if (killerMoves[ply][0] !== cutKey) {
+              killerMoves[ply][1] = killerMoves[ply][0];
+              killerMoves[ply][0] = cutKey;
+            }
+          }
+          if (!captured) {
+            const fromIdx = move.from[0] * BOARD_COLS + move.from[1];
+            const toIdx = move.to[0] * BOARD_COLS + move.to[1];
+            historyHeuristic[side][fromIdx][toIdx] += depth * depth;
+          }
+          break;
+        }
       }
+      storeTTEntry(depth, value, alphaOrig, betaOrig, bestKey);
       return value;
     }
 
     function quiescence(side, alpha, beta, depth) {
+      if ((repetitionTable.get(currentHash) || 0) >= 2) return 0;
       const standPat = evaluateBoard();
       if (depth === 0) return standPat;
       if (side === "r") {
@@ -1056,15 +1151,11 @@
         if (alpha >= beta) return alpha;
       }
       const captures = getLegalMoves(side).filter((m) => board[m.to[0]][m.to[1]]);
-      const ordered = orderMoves(captures, side);
+      const ordered = orderMoves(captures, side, 0, null);
       for (const move of ordered) {
-        const captured = board[move.to[0]][move.to[1]];
-        const piece = board[move.from[0]][move.from[1]];
-        board[move.from[0]][move.from[1]] = null;
-        board[move.to[0]][move.to[1]] = piece;
+        const captured = makeSearchMove(move);
         const score = quiescence(side === "r" ? "b" : "r", alpha, beta, depth - 1);
-        board[move.from[0]][move.from[1]] = piece;
-        board[move.to[0]][move.to[1]] = captured;
+        undoSearchMove(move, captured);
         if (side === "r") {
           if (score > alpha) alpha = score;
           if (alpha >= beta) break;
@@ -1076,20 +1167,71 @@
       return side === "r" ? alpha : beta;
     }
 
-    function orderMoves(moves, side) {
-      return moves.slice().sort((a, b) => scoreMove(b, side) - scoreMove(a, side));
+    function moveKey(move) {
+      return `${move.from[0]}${move.from[1]}${move.to[0]}${move.to[1]}`;
     }
 
-    function scoreMove(move, side) {
+    function orderMoves(moves, side, ply, ttMoveKey) {
+      return moves.slice().sort((a, b) => scoreMove(b, side, ply, ttMoveKey) - scoreMove(a, side, ply, ttMoveKey));
+    }
+
+    function scoreMove(move, side, ply, ttMoveKey) {
       const attacker = board[move.from[0]][move.from[1]];
       const target = board[move.to[0]][move.to[1]];
       let score = 0;
+      const key = moveKey(move);
+      if (ttMoveKey && key === ttMoveKey) score += 1_000_000_000;
       if (target) {
-        score += (PIECES[target].value - PIECES[attacker].value / 10);
+        score += 1_000_000 + (PIECES[target].value * 10 - PIECES[attacker].value);
+      } else if (killerMoves[ply]) {
+        if (killerMoves[ply][0] === key) score += 500_000;
+        else if (killerMoves[ply][1] === key) score += 300_000;
+      }
+      if (historyHeuristic[side]) {
+        const fromIdx = move.from[0] * BOARD_COLS + move.from[1];
+        const toIdx = move.to[0] * BOARD_COLS + move.to[1];
+        score += historyHeuristic[side][fromIdx][toIdx];
       }
       if (side === "r" && move.to[0] <= 2) score += 15;
       if (side === "b" && move.to[0] >= 7) score += 15;
       return score;
+    }
+
+    function storeTTEntry(depth, value, alphaOrig, betaOrig, bestKey) {
+      let flag = "exact";
+      if (value <= alphaOrig) flag = "upper";
+      else if (value >= betaOrig) flag = "lower";
+      transpositionTable.set(currentHash, { depth, score: value, flag, bestKey });
+    }
+
+    function makeSearchMove(move) {
+      const piece = board[move.from[0]][move.from[1]];
+      const captured = board[move.to[0]][move.to[1]];
+      currentHash ^= zobrist.pieces[piece][move.from[0]][move.from[1]];
+      if (captured) currentHash ^= zobrist.pieces[captured][move.to[0]][move.to[1]];
+      currentHash ^= zobrist.pieces[piece][move.to[0]][move.to[1]];
+      currentHash ^= zobrist.side;
+      board[move.from[0]][move.from[1]] = null;
+      board[move.to[0]][move.to[1]] = piece;
+      repetitionStack.push(currentHash);
+      repetitionTable.set(currentHash, (repetitionTable.get(currentHash) || 0) + 1);
+      return captured;
+    }
+
+    function undoSearchMove(move, captured) {
+      const piece = board[move.to[0]][move.to[1]];
+      currentHash ^= zobrist.side;
+      currentHash ^= zobrist.pieces[piece][move.to[0]][move.to[1]];
+      if (captured) currentHash ^= zobrist.pieces[captured][move.to[0]][move.to[1]];
+      currentHash ^= zobrist.pieces[piece][move.from[0]][move.from[1]];
+      board[move.from[0]][move.from[1]] = piece;
+      board[move.to[0]][move.to[1]] = captured;
+      const last = repetitionStack.pop();
+      if (last !== undefined) {
+        const next = (repetitionTable.get(last) || 1) - 1;
+        if (next <= 0) repetitionTable.delete(last);
+        else repetitionTable.set(last, next);
+      }
     }
 
     function formatMove(move) {
@@ -1153,7 +1295,7 @@
 
     document.getElementById("toggle-side").addEventListener("click", (e) => {
       sideToMove = sideToMove === "r" ? "b" : "r";
-      e.target.textContent = "輪到：" + (sideToMove === "r" ? "紅方" : "黑方");
+      updateSideLabel();
       updateAnalysis("輪到" + (sideToMove === "r" ? "紅方" : "黑方") + "。", false);
     });
 
@@ -1172,6 +1314,7 @@
     async function suggestMoveAsync(maxDepth) {
       isThinking = true;
       suggestBtn.disabled = true;
+      resetSearchState(maxDepth);
       progressBarEl.style.width = "0%";
       progressTextEl.textContent = "計算中...";
       updateAnalysis("計算中，請稍候…", false);
@@ -1207,6 +1350,7 @@
     document.getElementById("export").addEventListener("click", exportBoard);
     document.getElementById("import").addEventListener("click", importBoard);
 
+    initZobrist();
     buildPalette();
     setupBoard();
     renderBoard();
