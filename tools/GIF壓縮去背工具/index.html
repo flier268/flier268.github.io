@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GIF 壓縮去背工具</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>🎨 GIF 壓縮去背工具</h1>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>📁 點擊或拖放 GIF 圖片到這裡</p>
+            <input type="file" id="fileInput" accept="image/gif">
+        </div>
+
+        <div class="settings">
+            <div class="setting-row">
+                <label>縮放比例:</label>
+                <input type="range" id="scaleRange" min="10" max="100" value="65">
+                <input type="number" id="scaleValue" min="10" max="100" value="65">
+                <span>%</span>
+            </div>
+            <div class="setting-row">
+                <label>顏色數:</label>
+                <input type="range" id="colorRange" min="2" max="256" value="64">
+                <input type="number" id="colorValue" min="2" max="256" value="64">
+                <span>色</span>
+            </div>
+            <div class="setting-row">
+                <label>啟用去背:</label>
+                <input type="checkbox" id="enableRemoveBg" checked>
+            </div>
+            <div class="setting-row" id="bgColorRow">
+                <label>去背顏色:</label>
+                <input type="color" id="bgColor" value="#ffffff">
+                <span id="bgColorDisplay">#ffffff</span>
+            </div>
+            <div class="setting-row" id="toleranceRow">
+                <label>顏色容差:</label>
+                <input type="range" id="toleranceRange" min="0" max="100" value="20">
+                <input type="number" id="toleranceValue" min="0" max="100" value="20">
+            </div>
+            <div class="setting-row" id="seedPointsRow">
+                <label>起始點設定:</label>
+                <button type="button" id="addSeedPointBtn" class="btn-seed">點擊預覽圖設定</button>
+                <button type="button" id="clearSeedPointsBtn" class="btn-seed">清除所有點</button>
+                <button type="button" id="useDefaultCornersBtn" class="btn-seed">使用四角</button>
+                <span id="seedPointsInfo">0 個點</span>
+            </div>
+            <div class="setting-row">
+                <label>跳幀:</label>
+                <select id="frameSkip">
+                    <option value="1">保留全部幀</option>
+                    <option value="2">每 2 幀保留 1 幀</option>
+                    <option value="3">每 3 幀保留 1 幀</option>
+                    <option value="4">每 4 幀保留 1 幀</option>
+                    <option value="5">每 5 幀保留 1 幀</option>
+                </select>
+                <span id="frameInfo"></span>
+            </div>
+        </div>
+
+        <div class="btn-container">
+            <button id="processBtn" disabled>開始處理</button>
+            <button id="downloadBtn" class="btn-download" style="display:none;">下載結果</button>
+        </div>
+
+        <div class="progress" id="progress">
+            <div class="progress-bar" id="progressBar"></div>
+        </div>
+        <div class="status" id="status"></div>
+
+        <div class="preview-container">
+            <div class="preview-box" id="originalBox">
+                <h3>原始圖片</h3>
+                <div style="position: relative; display: inline-block;">
+                    <img id="originalPreview" style="display:none;">
+                    <div id="seedPointsContainer"></div>
+                </div>
+                <div class="info" id="originalInfo"></div>
+            </div>
+            <div class="preview-box">
+                <h3>處理後</h3>
+                <img id="resultPreview" style="display:none;">
+                <div class="info" id="resultInfo"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
