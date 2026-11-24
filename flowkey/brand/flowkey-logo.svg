@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-label="FlowKey app icon">
+  <!--
+    FlowKey app icon master. Square, full-bleed, no rounded corners: each platform applies its own mask.
+    tools/generate_app_icons.py renders every icon from this file:
+      - whole image: iOS AppIcon 1024, Play 512
+      - #fk-background alone: Android adaptive background (the shapes run past the canvas so the 108dp layer has bleed)
+      - #fk-foreground alone (keycap row + flow trail): Android adaptive foreground and monochrome layers
+    Keep the two group ids.
+  -->
+  <defs>
+    <linearGradient id="fkBlue" x1="200" y1="200" x2="800" y2="800" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1499FD"/>
+      <stop offset="0.21" stop-color="#118CFD"/>
+      <stop offset="0.375" stop-color="#0F7AFD"/>
+      <stop offset="0.55" stop-color="#1071FD"/>
+      <stop offset="0.71" stop-color="#1567FD"/>
+      <stop offset="0.9" stop-color="#1A61FD"/>
+    </linearGradient>
+    <radialGradient id="fkGlow" cx="520" cy="1100" r="640" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#C882B0"/>
+      <stop offset="0.18" stop-color="#AF7DBA"/>
+      <stop offset="0.3" stop-color="#9375C9"/>
+      <stop offset="0.52" stop-color="#6169E3"/>
+      <stop offset="0.82" stop-color="#2D63F7"/>
+      <stop offset="1" stop-color="#1070FA" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="fkTeal" x1="0" y1="0" x2="300" y2="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#02D0AE"/>
+      <stop offset="1" stop-color="#05C8B9"/>
+    </linearGradient>
+    <linearGradient id="fkTealBand" x1="150" y1="150" x2="350" y2="350" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#07D2C5"/>
+      <stop offset="1" stop-color="#07CDCD"/>
+    </linearGradient>
+    <linearGradient id="fkOrange" x1="650" y1="1000" x2="1000" y2="650" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FD8008"/>
+      <stop offset="1" stop-color="#FF9A02"/>
+    </linearGradient>
+    <linearGradient id="fkTrail" x1="180" y1="820" x2="860" y2="200" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FD920A"/>
+      <stop offset="0.55" stop-color="#FEB408"/>
+      <stop offset="1" stop-color="#FCE96A"/>
+    </linearGradient>
+    <!-- Teal only up here; it follows the blue field out of the left edge, below that the area outside the field shows the purple glow. -->
+    <clipPath id="fkUpperLeft">
+      <path d="M1700 -829L300 300L25 499L0 560L-60 700L-700 1000V-829Z"/>
+    </clipPath>
+    <filter id="fkKeyShadow" x="-30%" y="-40%" width="160%" height="180%">
+      <feDropShadow dx="0" dy="12" stdDeviation="26" flood-color="#0040E0" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <g id="fk-background">
+    <rect x="-1000" y="-1000" width="3000" height="3000" fill="url(#fkBlue)"/>
+    <rect x="-1000" y="-1000" width="3000" height="3000" fill="url(#fkGlow)"/>
+    <g clip-path="url(#fkUpperLeft)">
+      <rect x="-1000" y="-1000" width="3000" height="3000" fill="url(#fkTeal)"/>
+      <!-- Lighter teal band: the blue field's ellipse scaled by 1.1. -->
+      <path d="M-150 673A1867 791 -10.26 1 0 3524 9A1867 791 -10.26 1 0 -150 673Z" fill="url(#fkTealBand)"/>
+    </g>
+    <!-- Blue field: ellipse centred at (1687, 341), radii 1697 × 719, rotated -10.26°. -->
+    <path d="M17 643A1697 719 -10.26 1 0 3357 39A1697 719 -10.26 1 0 17 643Z" fill="url(#fkBlue)"/>
+    <!-- Orange corner: half-plane past the line through (1016, 640) and (599, 1023). -->
+    <path d="M2121 -375L-89 1655L926 2759L3135 730Z" fill="url(#fkOrange)"/>
+  </g>
+
+  <g id="fk-foreground">
+    <!-- Three blank keycaps in a row: a pale front lip (#BCD2F4) 26 units below each white top face. -->
+    <g filter="url(#fkKeyShadow)">
+      <rect x="126" y="672" width="236" height="166" rx="52" fill="#BCD2F4"/>
+      <rect x="126" y="646" width="236" height="166" rx="52" fill="#FFFFFF"/>
+      <rect x="394" y="672" width="236" height="166" rx="52" fill="#BCD2F4"/>
+      <rect x="394" y="646" width="236" height="166" rx="52" fill="#FFFFFF"/>
+      <rect x="662" y="672" width="236" height="166" rx="52" fill="#BCD2F4"/>
+      <rect x="662" y="646" width="236" height="166" rx="52" fill="#FFFFFF"/>
+    </g>
+    <!--
+      Flow trail: a comet rising from above the left key to the upper right.
+      Centre line is the cubic M200 580 C430 600 650 480 792 236; the width grows from 0 at the tail to 172 at the head
+      (width = 172 * t^1.2). The outline below is that taper fitted with three cubics per side (within 1 unit);
+      the round head is the circle on the end point.
+    -->
+    <path fill="url(#fkTrail)"
+          d="M200.0 580.0
+             C287.8 590.6 344.8 593.7 431.4 575.8
+             C514.9 558.5 589.9 525.6 660.9 478.2
+             C742.2 424.0 807.7 357.5 866.3 279.3
+             L717.7 192.7
+             C685.7 268.3 646.5 336.3 592.1 397.9
+             C542.1 454.5 485.1 499.5 416.9 532.1
+             C352.2 563.0 271.6 583.7 200.0 580.0Z"/>
+    <circle cx="792" cy="236" r="86" fill="url(#fkTrail)"/>
+  </g>
+</svg>
